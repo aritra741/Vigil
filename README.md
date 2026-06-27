@@ -1,6 +1,6 @@
 # Vigil
 
-Financial Risk Operations Command Center — built for the H0 Hackathon with Next.js 15, Aurora DSQL, and Vercel.
+Financial Risk Operations Command Center - built with Next.js 15, Aurora DSQL, and Vercel.
 
 ## Features
 
