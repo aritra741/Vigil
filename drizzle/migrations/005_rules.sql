@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  metric TEXT NOT NULL,
+  operator TEXT NOT NULL,
+  rule_value TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'medium',
+  action TEXT NOT NULL DEFAULT 'flag',
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
