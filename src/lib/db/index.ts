@@ -1,9 +1,8 @@
 import { AuroraDSQLPool } from "@aws/aurora-dsql-node-postgres-connector";
 import { awsCredentialsProvider } from "@vercel/oidc-aws-credentials-provider";
-import { DsqlSigner } from "@aws-sdk/dsql-signer";
 import { attachDatabasePool } from "@vercel/functions";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Pool, type PoolClient } from "pg";
+import { type PoolClient } from "pg";
 import * as schema from "./schema";
 import * as relations from "./relations";
 
@@ -11,7 +10,7 @@ const fullSchema = { ...schema, ...relations };
 
 type Db = NodePgDatabase<typeof fullSchema>;
 
-let pool: AuroraDSQLPool | Pool | null = null;
+let pool: AuroraDSQLPool | null = null;
 let dbInstance: Db | null = null;
 
 export function isDbConfigured(): boolean {
@@ -22,19 +21,14 @@ function useOidc(): boolean {
   return Boolean(process.env.AWS_ROLE_ARN && process.env.VERCEL);
 }
 
-async function createLocalPool(): Promise<Pool> {
-  const signer = new DsqlSigner({
-    hostname: process.env.PGHOST!,
+function createLocalPool(): AuroraDSQLPool {
+  return new AuroraDSQLPool({
+    host: process.env.PGHOST!,
     region: process.env.AWS_REGION!,
-  });
-  const token = await signer.getDbConnectAdminAuthToken();
-  return new Pool({
-    host: process.env.PGHOST,
     user: process.env.PGUSER || "admin",
-    password: token,
     database: process.env.PGDATABASE || "postgres",
     port: Number(process.env.PGPORT || 5432),
-    ssl: true,
+    ...(process.env.AWS_PROFILE ? { profile: process.env.AWS_PROFILE } : {}),
     max: 5,
   });
 }
@@ -55,14 +49,14 @@ function createOidcPool(): AuroraDSQLPool {
   return p;
 }
 
-async function getPool(): Promise<AuroraDSQLPool | Pool> {
+async function getPool(): Promise<AuroraDSQLPool> {
   if (pool) return pool;
   if (!isDbConfigured()) {
     throw new Error(
-      "Database not configured. Set PGHOST and AWS_REGION environment variables."
+      "Database not configured. Set PGHOST and AWS_REGION in .env.local."
     );
   }
-  pool = useOidc() ? createOidcPool() : await createLocalPool();
+  pool = useOidc() ? createOidcPool() : createLocalPool();
   return pool;
 }
 

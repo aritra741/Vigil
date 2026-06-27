@@ -1,5 +1,5 @@
-import { config } from "dotenv";
-config({ path: ".env.local" });
+import { loadEnv } from "./load-env";
+loadEnv();
 
 import { eq } from "drizzle-orm";
 import { getDb } from "./index";

@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "db:check": "tsx src/lib/db/check-connection.ts",
     "db:migrate": "tsx src/lib/db/migrate.ts",
     "db:seed": "tsx src/lib/db/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/credential-providers": "^3.1072.0",
     "@aws-sdk/dsql-signer": "^3.1072.0",
     "@aws/aurora-dsql-node-postgres-connector": "^0.1.9",
     "@base-ui/react": "^1.6.0",

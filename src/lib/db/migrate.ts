@@ -1,5 +1,5 @@
-import { config } from "dotenv";
-config({ path: ".env.local" });
+import { loadEnv } from "./load-env";
+loadEnv();
 
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
@@ -39,16 +39,14 @@ async function applyMigration(
   sql: string
 ) {
   console.log(`Applying migration: ${name}`);
-  await client.query("BEGIN");
   try {
+    // DSQL rejects DDL and DML in the same transaction.
     await client.query(sql);
     await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [
       name,
     ]);
-    await client.query("COMMIT");
     console.log(`✓ Applied: ${name}`);
   } catch (err) {
-    await client.query("ROLLBACK");
     throw err;
   }
 }

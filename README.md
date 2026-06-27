@@ -24,31 +24,80 @@ Financial Risk Operations Command Center - built with Next.js 15, Aurora DSQL, a
 
 ### 1. Provision Aurora DSQL
 
-Install via [Vercel Marketplace](https://vercel.com/marketplace/aws/aws-dsql) or AWS CLI.
+Install via [Vercel Marketplace](https://vercel.com/marketplace/aws/aws-dsql) or AWS CLI:
 
-### 2. Configure Environment
+```bash
+aws dsql create-cluster --region us-east-1
+aws dsql get-cluster --identifier <cluster-id> --region us-east-1
+```
+
+Copy the cluster endpoint into `PGHOST` (format: `<id>.dsql.<region>.on.aws`).
+
+### 2. Configure AWS credentials (local dev)
+
+Local development authenticates with IAM via your machine's AWS credential chain — not Vercel OIDC.
+
+**Install AWS CLI** (if needed):
+
+```bash
+brew install awscli
+```
+
+**Configure credentials** (pick one):
+
+```bash
+# Option A: interactive profile (recommended)
+aws configure
+# Enter Access Key ID, Secret Access Key, and region (e.g. us-east-1)
+
+# Option B: environment variables
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
+
+# Option C: named profile — set AWS_PROFILE in .env.local
+aws configure --profile vigil
+```
+
+Your IAM principal needs `dsql:DbConnectAdmin` on the cluster (admin user) or `dsql:DbConnect` for non-admin users.
+
+Verify credentials:
+
+```bash
+aws sts get-caller-identity
+```
+
+### 3. Configure environment
 
 ```bash
 cp .env.example .env.local
-# Fill in PGHOST, AWS_REGION, AWS_ROLE_ARN
-vercel env pull .env.local  # if using Vercel
+# Edit PGHOST and AWS_REGION to match your cluster
 ```
 
-### 3. Install & Migrate
+For Vercel deployments, also set `AWS_ROLE_ARN` and pull env vars:
+
+```bash
+vercel env pull .env.local
+```
+
+### 4. Install & verify
 
 ```bash
 npm install
+npm run db:check    # test AWS → DSQL connection
 npm run db:migrate
 npm run db:seed
 ```
 
-### 4. Run
+### 5. Run
 
 ```bash
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) for the landing page, then enter the dashboard.
+
+Without `PGHOST` / `AWS_REGION`, the app falls back to demo data so you can explore the UI without a database.
 
 ## DSQL Design Decisions
 
@@ -66,6 +115,7 @@ Open [http://localhost:3000](http://localhost:3000) for the landing page, then e
 |---------|-------------|
 | `npm run dev` | Start development server |
 | `npm run build` | Production build |
+| `npm run db:check` | Verify AWS credentials and DSQL connectivity |
 | `npm run db:migrate` | Run DSQL-safe migrations |
 | `npm run db:seed` | Seed 50K demo transactions |
 

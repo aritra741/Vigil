@@ -35,10 +35,12 @@ export function MobileNav({ openAlertCount = 0 }: MobileNavProps) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger>
-        <Button variant="ghost" size="icon" className="lg:hidden">
-          <Menu className="h-5 w-5" />
-        </Button>
+      <SheetTrigger
+        render={
+          <Button variant="ghost" size="icon" className="lg:hidden" />
+        }
+      >
+        <Menu className="h-5 w-5" />
       </SheetTrigger>
       <SheetContent side="left" className="w-56 p-2" style={{ backgroundColor: "#0a0a0a", borderColor: "#222" }}>
         <nav className="mt-6 space-y-0.5">

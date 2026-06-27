@@ -74,11 +74,13 @@ export function RuleBuilder() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <Button className="bg-violet-600 hover:bg-violet-700">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Rule
-        </Button>
+      <DialogTrigger
+        render={
+          <Button className="bg-violet-600 hover:bg-violet-700" />
+        }
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Create Rule
       </DialogTrigger>
       <DialogContent className="bg-zinc-900 border-zinc-800 sm:max-w-md">
         <DialogHeader>
