@@ -9,8 +9,8 @@ import {
   rules,
 } from "@/lib/db/schema";
 import { getTenantId } from "@/lib/tenant";
-import { generateId, generateIdempotencyKey } from "@/lib/utils/ids";
-import { addMockTransaction } from "@/lib/demo/mock-db";
+import { generateId } from "@/lib/utils/ids";
+import { addMockTransaction, getMockBurstTransaction } from "@/lib/demo/mock-db";
 import {
   evaluateAllRules,
   buildExplanation,
@@ -27,6 +27,23 @@ import {
   DEMO_RECENT_ALERTS,
   DEMO_TRANSACTIONS,
 } from "@/lib/demo/data";
+
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import * as schema from "@/lib/db/schema";
+import * as relations from "@/lib/db/relations";
+
+type Db = NodePgDatabase<typeof schema & typeof relations>;
+
+const BURST_PROFILES: Array<{
+  profile: "normal" | "critical" | "high";
+  idempotencyKey: string;
+}> = [
+  { profile: "normal", idempotencyKey: "burst_sim_normal_1" },
+  { profile: "normal", idempotencyKey: "burst_sim_normal_2" },
+  { profile: "high", idempotencyKey: "burst_sim_high_1" },
+  { profile: "critical", idempotencyKey: "burst_sim_critical_1" },
+  { profile: "critical", idempotencyKey: "burst_sim_critical_2" },
+];
 
 export interface DashboardMetrics {
   transactionsToday: number;
@@ -365,39 +382,148 @@ async function getVelocityStats(db: any, tenantId: string, senderName: string) {
   };
 }
 
+async function insertTransactionIdempotent(
+  db: Db,
+  tenantId: string,
+  values: typeof transactions.$inferInsert
+): Promise<{ tx: typeof transactions.$inferSelect; isNew: boolean }> {
+  const inserted = await withRetry(() =>
+    db
+      .insert(transactions)
+      .values(values)
+      .onConflictDoNothing({
+        target: [transactions.tenantId, transactions.idempotencyKey],
+      })
+      .returning()
+  );
+
+  if (inserted.length > 0) {
+    return { tx: inserted[0], isNew: true };
+  }
+
+  const [existing] = await db
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.tenantId, tenantId),
+        eq(transactions.idempotencyKey, values.idempotencyKey)
+      )
+    )
+    .limit(1);
+
+  if (!existing) {
+    throw new Error("Failed to resolve idempotent transaction insert");
+  }
+
+  return { tx: existing, isNew: false };
+}
+
+async function createAlertsForTransaction(
+  db: Db,
+  tenantId: string,
+  tx: typeof transactions.$inferSelect,
+  matched: RuleForEval[],
+  txForRules: Parameters<typeof buildExplanation>[1]
+): Promise<number> {
+  if (matched.length === 0) return 0;
+
+  const existingAlerts = await db
+    .select({ ruleId: alerts.ruleId })
+    .from(alerts)
+    .where(
+      and(eq(alerts.tenantId, tenantId), eq(alerts.transactionId, tx.id))
+    );
+
+  const existingRuleIds = new Set(existingAlerts.map((a) => a.ruleId));
+  let created = 0;
+
+  for (const rule of matched) {
+    if (existingRuleIds.has(rule.id)) continue;
+
+    await withRetry(() =>
+      db.transaction(async (txn) => {
+        const alertId = generateId();
+        await txn.insert(alerts).values({
+          id: alertId,
+          tenantId,
+          transactionId: tx.id,
+          ruleId: rule.id,
+          title: `${rule.severity.toUpperCase()}: ${rule.name}`,
+          severity: rule.severity,
+          status: "open",
+          explanation: buildExplanation(rule, txForRules),
+        });
+
+        await txn.insert(auditLogs).values({
+          tenantId,
+          actorId: DEMO_ADMIN_ID,
+          actorName: "System",
+          action: "alert_created",
+          entityType: "alert",
+          entityId: alertId,
+          detailsText: `Alert opened automatically by rule "${rule.name}"`,
+        });
+      })
+    );
+
+    created++;
+  }
+
+  return created;
+}
+
 export async function simulateTransactionBurst(): Promise<{
   success: boolean;
   error?: string;
   transactions?: any[];
   alertsCreated?: number;
+  idempotentReplay?: boolean;
 }> {
   if (!isDbConfigured()) {
-    const profiles: Array<"normal" | "critical" | "high"> = [
-      "normal",
-      "normal",
-      "high",
-      "critical",
-      "critical",
-    ];
     const insertedTx: any[] = [];
     let alertsCreated = 0;
 
-    for (const profile of profiles) {
+    for (const { profile, idempotencyKey } of BURST_PROFILES) {
       const data = generateSimulatedTransaction(profile);
-      const severity = profile === "critical" ? "critical" : profile === "high" ? "high" : "medium";
-      const status = profile === "normal" ? "cleared" : profile === "critical" ? "blocked" : "flagged";
+      const severity =
+        profile === "critical" ? "critical" : profile === "high" ? "high" : "medium";
+      const status =
+        profile === "normal" ? "cleared" : profile === "critical" ? "blocked" : "flagged";
 
-      const mockTx = addMockTransaction({
-        senderCountry: data.senderCountry,
-        receiverCountry: data.receiverCountry,
-        amount: data.amount,
-        status,
-        ruleName: profile === "critical" ? "Extreme risk score" : "High-value transfer",
-        severity,
-        senderName: data.senderName,
-        receiverName: data.receiverName,
-        title: `${severity.toUpperCase()}: ${profile === "critical" ? "Extreme risk score" : "High-value transfer"}`
-      });
+      const existing = getMockBurstTransaction(idempotencyKey);
+      if (existing) {
+        insertedTx.push({
+          id: existing.id,
+          amount: existing.amount.toFixed(2),
+          currency: "USD",
+          senderName: existing.senderName,
+          senderCountry: existing.senderCountry,
+          receiverName: existing.receiverName,
+          receiverCountry: existing.receiverCountry,
+          paymentRail: data.paymentRail,
+          riskScore: data.riskScore.toFixed(3),
+          status: existing.status,
+          createdAt: existing.createdAt,
+        });
+        continue;
+      }
+
+      const mockTx = addMockTransaction(
+        {
+          senderCountry: data.senderCountry,
+          receiverCountry: data.receiverCountry,
+          amount: data.amount,
+          status,
+          ruleName:
+            profile === "critical" ? "Extreme risk score" : "High-value transfer",
+          severity,
+          senderName: data.senderName,
+          receiverName: data.receiverName,
+          title: `${severity.toUpperCase()}: ${profile === "critical" ? "Extreme risk score" : "High-value transfer"}`,
+        },
+        idempotencyKey
+      );
 
       insertedTx.push({
         id: mockTx.id,
@@ -418,7 +544,12 @@ export async function simulateTransactionBurst(): Promise<{
       }
     }
 
-    return { success: true, transactions: insertedTx, alertsCreated };
+    return {
+      success: true,
+      transactions: insertedTx,
+      alertsCreated,
+      idempotentReplay: alertsCreated === 0,
+    };
   }
 
   const db = await getDb();
@@ -439,23 +570,14 @@ export async function simulateTransactionBurst(): Promise<{
     action: r.action,
   }));
 
-  const profiles: Array<"normal" | "critical" | "high"> = [
-    "normal",
-    "normal",
-    "high",
-    "critical",
-    "critical",
-  ];
-
   const insertedTx: (typeof transactions.$inferSelect)[] = [];
   let alertsCreated = 0;
+  let newTransactions = 0;
 
-  for (const profile of profiles) {
+  for (const { profile, idempotencyKey } of BURST_PROFILES) {
     const data = generateSimulatedTransaction(profile);
-    
-    const velocity = isDbConfigured()
-      ? await getVelocityStats(db, tenantId, data.senderName)
-      : { tx_count_1h: 0, tx_total_1h: 0, tx_count_24h: 0, tx_total_24h: 0 };
+
+    const velocity = await getVelocityStats(db, tenantId, data.senderName);
 
     const txForRules = {
       amount: data.amount,
@@ -474,55 +596,38 @@ export async function simulateTransactionBurst(): Promise<{
           ? "blocked"
           : "flagged";
 
-    const [tx] = await withRetry(() =>
-      db
-        .insert(transactions)
-        .values({
-          tenantId,
-          idempotencyKey: generateIdempotencyKey(),
-          amount: data.amount.toFixed(2),
-          currency: data.currency,
-          senderName: data.senderName,
-          senderCountry: data.senderCountry,
-          receiverName: data.receiverName,
-          receiverCountry: data.receiverCountry,
-          paymentRail: data.paymentRail,
-          riskScore: data.riskScore.toFixed(3),
-          status,
-        })
-        .returning()
-    );
+    const { tx, isNew } = await insertTransactionIdempotent(db, tenantId, {
+      tenantId,
+      idempotencyKey,
+      amount: data.amount.toFixed(2),
+      currency: data.currency,
+      senderName: data.senderName,
+      senderCountry: data.senderCountry,
+      receiverName: data.receiverName,
+      receiverCountry: data.receiverCountry,
+      paymentRail: data.paymentRail,
+      riskScore: data.riskScore.toFixed(3),
+      status,
+    });
 
     insertedTx.push(tx);
+    if (isNew) newTransactions++;
 
-    for (const rule of matched) {
-      const alertId = generateId();
-      await db.insert(alerts).values({
-        id: alertId,
-        tenantId,
-        transactionId: tx.id,
-        ruleId: rule.id,
-        title: `${rule.severity.toUpperCase()}: ${rule.name}`,
-        severity: rule.severity,
-        status: "open",
-        explanation: buildExplanation(rule, txForRules),
-      });
-
-      await db.insert(auditLogs).values({
-        tenantId,
-        actorId: DEMO_ADMIN_ID,
-        actorName: "System",
-        action: "alert_created",
-        entityType: "alert",
-        entityId: alertId,
-        detailsText: `Alert opened automatically by rule "${rule.name}"`,
-      });
-
-      alertsCreated++;
-    }
+    alertsCreated += await createAlertsForTransaction(
+      db,
+      tenantId,
+      tx,
+      matched,
+      txForRules
+    );
   }
 
-  return { success: true, transactions: insertedTx, alertsCreated };
+  return {
+    success: true,
+    transactions: insertedTx,
+    alertsCreated,
+    idempotentReplay: newTransactions === 0,
+  };
 }
 
 export async function ingestTransaction(data: {
@@ -540,13 +645,18 @@ export async function ingestTransaction(data: {
   const db = await getDb();
   const tenantId = await getTenantId();
 
-  const existing = await db
+  const [existing] = await db
     .select()
     .from(transactions)
-    .where(eq(transactions.idempotencyKey, data.idempotencyKey))
+    .where(
+      and(
+        eq(transactions.tenantId, tenantId),
+        eq(transactions.idempotencyKey, data.idempotencyKey)
+      )
+    )
     .limit(1);
 
-  if (existing.length > 0) return existing[0];
+  if (existing) return existing;
 
   const activeRules = await db
     .select()
@@ -563,9 +673,7 @@ export async function ingestTransaction(data: {
     action: r.action,
   }));
 
-  const velocity = isDbConfigured()
-    ? await getVelocityStats(db, tenantId, data.senderName)
-    : { tx_count_1h: 0, tx_total_1h: 0, tx_count_24h: 0, tx_total_24h: 0 };
+  const velocity = await getVelocityStats(db, tenantId, data.senderName);
 
   const txForRules = {
     amount: data.amount,
@@ -584,24 +692,19 @@ export async function ingestTransaction(data: {
         ? "blocked"
         : "flagged";
 
-  const [tx] = await withRetry(() =>
-    db
-      .insert(transactions)
-      .values({
-        tenantId,
-        idempotencyKey: data.idempotencyKey,
-        amount: data.amount.toFixed(2),
-        currency: data.currency,
-        senderName: data.senderName,
-        senderCountry: data.senderCountry,
-        receiverName: data.receiverName,
-        receiverCountry: data.receiverCountry,
-        paymentRail: data.paymentRail,
-        riskScore: data.riskScore.toFixed(3),
-        status,
-      })
-      .returning()
-  );
+  const { tx } = await insertTransactionIdempotent(db, tenantId, {
+    tenantId,
+    idempotencyKey: data.idempotencyKey,
+    amount: data.amount.toFixed(2),
+    currency: data.currency,
+    senderName: data.senderName,
+    senderCountry: data.senderCountry,
+    receiverName: data.receiverName,
+    receiverCountry: data.receiverCountry,
+    paymentRail: data.paymentRail,
+    riskScore: data.riskScore.toFixed(3),
+    status,
+  });
 
   return tx;
 }

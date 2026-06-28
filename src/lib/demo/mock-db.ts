@@ -16,6 +16,10 @@ export interface MockTx {
 
 const globalRef = global as any;
 
+if (!globalRef.mockBurstTransactions) {
+  globalRef.mockBurstTransactions = new Map<string, MockTx>();
+}
+
 if (!globalRef.mockTransactions) {
   globalRef.mockTransactions = [
     {
@@ -90,14 +94,30 @@ export function getMockTransactions(): MockTx[] {
   return globalRef.mockTransactions;
 }
 
-export function addMockTransaction(tx: Omit<MockTx, "id" | "createdAt">) {
+export function getMockBurstTransaction(idempotencyKey: string): MockTx | undefined {
+  return globalRef.mockBurstTransactions.get(idempotencyKey);
+}
+
+export function addMockTransaction(
+  tx: Omit<MockTx, "id" | "createdAt">,
+  idempotencyKey?: string
+) {
+  if (idempotencyKey) {
+    const existing = globalRef.mockBurstTransactions.get(idempotencyKey);
+    if (existing) return existing;
+  }
+
   const newTx: MockTx = {
     ...tx,
     id: generateId(),
     createdAt: new Date(),
   };
   globalRef.mockTransactions.unshift(newTx);
-  // Cap at 100 entries to prevent memory overflow
   globalRef.mockTransactions = globalRef.mockTransactions.slice(0, 100);
+
+  if (idempotencyKey) {
+    globalRef.mockBurstTransactions.set(idempotencyKey, newTx);
+  }
+
   return newTx;
 }

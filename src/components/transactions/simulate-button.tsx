@@ -20,11 +20,15 @@ export function SimulateButton() {
           return;
         }
         toast.success(
-          `${result.transactions.length} transactions ingested. ${result.alertsCreated} alerts triggered.`,
+          result.idempotentReplay
+            ? `${result.transactions.length} transactions already ingested (idempotent replay).`
+            : `${result.transactions.length} transactions ingested. ${result.alertsCreated} alerts triggered.`,
           {
-            description: result.alertsCreated > 0
-              ? "Critical alerts may require investigation"
-              : undefined,
+            description: result.idempotentReplay
+              ? "Duplicate burst suppressed by tenant-scoped idempotency keys"
+              : result.alertsCreated > 0
+                ? "Critical alerts may require investigation"
+                : undefined,
           }
         );
         router.refresh();

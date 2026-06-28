@@ -21,6 +21,10 @@ import {
   humanizeRule,
 } from "@/lib/utils/format";
 import { updateAlertStatus } from "@/lib/actions/alerts";
+import {
+  OCC_CONFLICT_CODE,
+  VERSION_CONFLICT_CODE,
+} from "@/lib/utils/db-errors";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Alert, Transaction, Rule, TenantUser, AuditLog } from "@/lib/db/schema";
@@ -61,13 +65,50 @@ export function AlertDetail({
   const [sarahAssigned, setSarahAssigned] = useState(alert.assignedTo ?? "");
   const [sarahVersion, setSarahVersion] = useState(alert.version);
   const [sarahPending, setSarahPending] = useState(false);
-  const [sarahMessage, setSarahMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [sarahMessage, setSarahMessage] = useState<{
+    type: "success" | "error" | "conflict" | "retry";
+    text: string;
+  } | null>(null);
 
   const [marcusStatus, setMarcusStatus] = useState(alert.status);
   const [marcusAssigned, setMarcusAssigned] = useState(alert.assignedTo ?? "");
   const [marcusVersion, setMarcusVersion] = useState(alert.version);
   const [marcusPending, setMarcusPending] = useState(false);
-  const [marcusMessage, setMarcusMessage] = useState<{ type: "success" | "error" | "conflict"; text: string } | null>(null);
+  const [marcusMessage, setMarcusMessage] = useState<{
+    type: "success" | "error" | "conflict" | "retry";
+    text: string;
+  } | null>(null);
+
+  const handleConflictResult = (
+    result: { error?: string; code?: string },
+    version: number,
+    setMessage: (msg: { type: "success" | "error" | "conflict" | "retry"; text: string } | null) => void,
+    analystLabel?: string
+  ) => {
+    if (result.code === OCC_CONFLICT_CODE) {
+      setMessage({
+        type: "retry",
+        text: "SQLSTATE 40001 — serializable conflict. DSQL aborted the write; please retry.",
+      });
+      toast.error(`${analystLabel ?? "Update"}: conflict (40001) — retry required`);
+      return;
+    }
+
+    if (
+      result.code === VERSION_CONFLICT_CODE ||
+      result.error?.includes("Concurrent") ||
+      result.error?.toLowerCase().includes("version") ||
+      result.error?.toLowerCase().includes("conflict")
+    ) {
+      setMessage({
+        type: "conflict",
+        text: `OCC mismatch — submitted v${version}, but another analyst updated first.`,
+      });
+      return;
+    }
+
+    setMessage({ type: "error", text: result.error || "Update failed" });
+  };
 
   // Keep concurrency states in sync with DB updates
   const syncStates = () => {
@@ -92,6 +133,11 @@ export function AlertDetail({
       );
       if (result.success && result.alert) {
         toast.success(`Alert updated successfully to version ${result.alert.version}`);
+        router.refresh();
+      } else if (result.code === OCC_CONFLICT_CODE) {
+        toast.error("SQLSTATE 40001 — please retry your update");
+      } else if (result.code === VERSION_CONFLICT_CODE) {
+        toast.error("Version conflict — refresh and try again");
         router.refresh();
       } else {
         toast.error(result.error ?? "Update failed");
@@ -120,7 +166,7 @@ export function AlertDetail({
         toast.success("Sarah Chen: Alert escalated successfully");
         router.refresh();
       } else {
-        setSarahMessage({ type: "error", text: result.error || "Update failed" });
+        handleConflictResult(result, sarahVersion, setSarahMessage, "Sarah Chen");
       }
     } catch (e: any) {
       setSarahMessage({ type: "error", text: e.message || "Failed" });
@@ -149,16 +195,11 @@ export function AlertDetail({
         toast.success("Marcus Rivera: Alert resolved successfully");
         router.refresh();
       } else {
-        if (
-          result.error?.includes("Concurrent") ||
-          result.error?.toLowerCase().includes("version") ||
-          result.error?.toLowerCase().includes("conflict")
-        ) {
+        if (result.code === VERSION_CONFLICT_CODE) {
           setMarcusMessage({
             type: "conflict",
-            text: `⚠️ OCC Mismatch! Marcus submitted v${marcusVersion}, but database is at v${alert.version + 1}.`,
+            text: `OCC mismatch! Marcus submitted v${marcusVersion}, but database is at v${alert.version + 1}.`,
           });
-          // Auto-retry simulation
           setTimeout(() => {
             setMarcusMessage({
               type: "error",
@@ -170,7 +211,7 @@ export function AlertDetail({
             }, 1500);
           }, 3500);
         } else {
-          setMarcusMessage({ type: "error", text: result.error || "Update failed" });
+          handleConflictResult(result, marcusVersion, setMarcusMessage, "Marcus Rivera");
         }
       }
     } catch (e: any) {
@@ -386,7 +427,11 @@ export function AlertDetail({
                         "p-2 rounded text-[10px] leading-tight",
                         sarahMessage.type === "success"
                           ? "bg-green-500/10 text-green-400 border border-green-500/20"
-                          : "bg-red-500/10 text-red-400 border border-red-500/20"
+                          : sarahMessage.type === "retry"
+                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/30 font-bold"
+                            : sarahMessage.type === "conflict"
+                              ? "bg-red-500/10 text-red-400 border border-red-500/30"
+                              : "bg-red-500/10 text-red-400 border border-red-500/20"
                       )}
                     >
                       {sarahMessage.text}
@@ -442,7 +487,9 @@ export function AlertDetail({
                           ? "bg-green-500/10 text-green-400 border border-green-500/20"
                           : marcusMessage.type === "conflict"
                             ? "bg-red-500/10 text-red-400 border border-red-500/30 animate-pulse font-bold"
-                            : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                            : marcusMessage.type === "retry"
+                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/30 font-bold"
+                              : "bg-zinc-800 text-zinc-400 border border-zinc-700"
                       )}
                     >
                       {marcusMessage.text}

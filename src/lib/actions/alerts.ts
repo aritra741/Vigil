@@ -5,6 +5,11 @@ import { getDb, isDbConfigured } from "@/lib/db";
 import { alerts, transactions, rules, tenantUsers, auditLogs } from "@/lib/db/schema";
 import { getTenantId } from "@/lib/tenant";
 import { withRetry } from "@/lib/utils/retry";
+import {
+  AppDatabaseError,
+  VERSION_CONFLICT_CODE,
+  getErrorCode,
+} from "@/lib/utils/db-errors";
 import { DEMO_ADMIN_ID } from "@/types";
 import {
   DEMO_ALERT_ROWS,
@@ -120,7 +125,12 @@ export async function updateAlertStatus(
   currentVersion: number,
   assignedTo?: string | null,
   actorName: string = "Aritra Sen"
-) {
+): Promise<{
+  success: boolean;
+  alert?: (typeof alerts.$inferSelect);
+  error?: string;
+  code?: string;
+}> {
   if (!isDbConfigured()) {
     return { success: false, error: "Database not configured" };
   }
@@ -129,51 +139,55 @@ export async function updateAlertStatus(
   const tenantId = await getTenantId();
 
   try {
-    const result = await withRetry(async () => {
-      const updated = await db
-        .update(alerts)
-        .set({
-          status: newStatus,
-          version: currentVersion + 1,
-          assignedTo: assignedTo ?? undefined,
-          resolvedAt:
-            newStatus === "resolved" || newStatus === "false_positive"
-              ? new Date()
-              : null,
-        })
-        .where(
-          and(
-            eq(alerts.id, alertId),
-            eq(alerts.version, currentVersion),
-            eq(alerts.tenantId, tenantId)
+    const result = await withRetry(async () =>
+      db.transaction(async (tx) => {
+        const updated = await tx
+          .update(alerts)
+          .set({
+            status: newStatus,
+            version: currentVersion + 1,
+            assignedTo: assignedTo ?? undefined,
+            resolvedAt:
+              newStatus === "resolved" || newStatus === "false_positive"
+                ? new Date()
+                : null,
+          })
+          .where(
+            and(
+              eq(alerts.id, alertId),
+              eq(alerts.version, currentVersion),
+              eq(alerts.tenantId, tenantId)
+            )
           )
-        )
-        .returning();
+          .returning();
 
-      if (updated.length === 0) {
-        throw new Error(
-          "Concurrent modification detected. The alert was updated by another user."
-        );
-      }
+        if (updated.length === 0) {
+          throw new AppDatabaseError(
+            "Concurrent modification detected. The alert was updated by another user.",
+            VERSION_CONFLICT_CODE
+          );
+        }
 
-      await db.insert(auditLogs).values({
-        tenantId,
-        actorId: DEMO_ADMIN_ID,
-        actorName,
-        action: "status_changed",
-        entityType: "alert",
-        entityId: alertId,
-        detailsText: `Status changed to ${newStatus}`,
-      });
+        await tx.insert(auditLogs).values({
+          tenantId,
+          actorId: DEMO_ADMIN_ID,
+          actorName,
+          action: "status_changed",
+          entityType: "alert",
+          entityId: alertId,
+          detailsText: `Status changed to ${newStatus}`,
+        });
 
-      return updated[0];
-    });
+        return updated[0];
+      })
+    );
 
     return { success: true, alert: result };
   } catch (err) {
     return {
       success: false,
       error: err instanceof Error ? err.message : "Update failed",
+      code: getErrorCode(err),
     };
   }
 }

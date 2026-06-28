@@ -1,14 +1,12 @@
-const OCC_SQLSTATE = "40001";
+import { recordOccRetry } from "@/lib/db/telemetry";
+import {
+  AppDatabaseError,
+  OCC_CONFLICT_CODE,
+  isDatabaseError,
+} from "@/lib/utils/db-errors";
+
 const BASE_DELAY_MS = 50;
 const MAX_RETRIES = 3;
-
-interface DatabaseError extends Error {
-  code?: string;
-}
-
-function isDatabaseError(err: unknown): err is DatabaseError {
-  return err instanceof Error && "code" in err;
-}
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -18,13 +16,24 @@ export async function withRetry<T>(
     try {
       return await fn();
     } catch (err: unknown) {
-      const isOCC = isDatabaseError(err) && err.code === OCC_SQLSTATE;
+      if (err instanceof AppDatabaseError) throw err;
+
+      const isOCC = isDatabaseError(err) && err.code === OCC_CONFLICT_CODE;
       if (isOCC && attempt < maxRetries) {
+        recordOccRetry();
         const backoff = BASE_DELAY_MS * 2 ** attempt;
         const jitter = Math.random() * backoff;
         await new Promise((resolve) => setTimeout(resolve, backoff + jitter));
         continue;
       }
+
+      if (isOCC) {
+        throw new AppDatabaseError(
+          "Transaction conflict (SQLSTATE 40001). Another writer won the race — please retry.",
+          OCC_CONFLICT_CODE
+        );
+      }
+
       throw err;
     }
   }

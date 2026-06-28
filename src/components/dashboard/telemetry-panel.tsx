@@ -13,10 +13,16 @@ interface QueryLog {
 
 export function TelemetryPanel() {
   const [isOpen, setIsOpen] = useState(false);
-  const [data, setData] = useState<{ recent: QueryLog[]; totalQueries: number; avgLatency: number }>({
+  const [data, setData] = useState<{
+    recent: QueryLog[];
+    totalQueries: number;
+    avgLatency: number;
+    occRetries?: number;
+  }>({
     recent: [],
     totalQueries: 0,
     avgLatency: 0,
+    occRetries: 0,
   });
 
   useEffect(() => {
@@ -85,7 +91,7 @@ export function TelemetryPanel() {
               <Database className="h-2.5 w-2.5 text-zinc-600" />
               Pool: <span className="text-green-500 font-bold">Active (3/10)</span>
             </span>
-            <span>OCC Retries: <span className="text-zinc-400">0</span></span>
+            <span>OCC Retries: <span className="text-zinc-400">{data.occRetries ?? 0}</span></span>
           </div>
 
           {/* Recent Query List */}

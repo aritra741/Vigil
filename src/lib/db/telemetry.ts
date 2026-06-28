@@ -8,6 +8,11 @@ export interface QueryMetric {
 // this acts as a session-based rolling buffer (ideal for local/demo telemetry).
 let queryMetricsStore: QueryMetric[] = [];
 let totalQueryCount = 0;
+let occRetryCount = 0;
+
+export function recordOccRetry() {
+  occRetryCount++;
+}
 
 export function recordQueryMetric(query: string, duration: number) {
   totalQueryCount++;
@@ -35,10 +40,12 @@ export function getTelemetryData() {
     recent,
     totalQueries: totalQueryCount,
     avgLatency: Math.round(avgDuration * 10) / 10,
+    occRetries: occRetryCount,
   };
 }
 
 export function clearTelemetry() {
   queryMetricsStore = [];
   totalQueryCount = 0;
+  occRetryCount = 0;
 }

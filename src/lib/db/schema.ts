@@ -6,6 +6,7 @@ import {
   boolean,
   integer,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -26,22 +27,31 @@ export const tenantUsers = pgTable("tenant_users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const transactions = pgTable("transactions", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: uuid("tenant_id").notNull(),
-  idempotencyKey: text("idempotency_key").notNull(),
-  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
-  currency: text("currency").notNull().default("USD"),
-  senderName: text("sender_name").notNull(),
-  senderCountry: text("sender_country").notNull(),
-  receiverName: text("receiver_name").notNull(),
-  receiverCountry: text("receiver_country").notNull(),
-  paymentRail: text("payment_rail").notNull(),
-  riskScore: numeric("risk_score", { precision: 4, scale: 3 }).notNull(),
-  status: text("status").notNull().default("pending"),
-  metadataText: text("metadata_text"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+export const transactions = pgTable(
+  "transactions",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid("tenant_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+    currency: text("currency").notNull().default("USD"),
+    senderName: text("sender_name").notNull(),
+    senderCountry: text("sender_country").notNull(),
+    receiverName: text("receiver_name").notNull(),
+    receiverCountry: text("receiver_country").notNull(),
+    paymentRail: text("payment_rail").notNull(),
+    riskScore: numeric("risk_score", { precision: 4, scale: 3 }).notNull(),
+    status: text("status").notNull().default("pending"),
+    metadataText: text("metadata_text"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_transactions_tenant_idempotency_unique").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+  ]
+);
 
 export const rules = pgTable("rules", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
