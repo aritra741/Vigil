@@ -67,6 +67,10 @@ export function humanizeRule(
     country_mismatch: "Country mismatch",
     risk_score: "Risk score",
     payment_rail: "Payment rail",
+    tx_count_1h: "Hourly transaction count",
+    tx_total_1h: "Hourly transaction volume",
+    tx_count_24h: "24-hour transaction count",
+    tx_total_24h: "24-hour transaction volume",
   };
   const opLabels: Record<string, string> = {
     greater_than: ">",
@@ -78,6 +82,6 @@ export function humanizeRule(
   const label = metricLabels[metric] ?? metric;
   const op = opLabels[operator] ?? operator;
   if (operator === "in_list") return `${label} in [${value}]`;
-  if (metric === "amount") return `${label} ${op} $${Number(value).toLocaleString()}`;
+  if (metric === "amount" || metric.includes("tx_total")) return `${label} ${op} $${Number(value).toLocaleString()}`;
   return `${label} ${op} ${value}`;
 }

@@ -45,7 +45,7 @@ function AlertList({ rows }: { rows: AlertRow[] }) {
             href={`/alerts/${alert.id}`}
             className="flex items-center gap-3 px-3 h-10 hover:bg-[#1a1a1a] transition-colors"
             style={{
-              backgroundColor: i % 2 === 0 ? SURFACE.card : SURFACE.rowAlt,
+              backgroundColor: SURFACE.card,
               borderBottom: `1px solid ${SURFACE.border}`,
               borderLeft: `3px solid ${sevColor}`,
             }}

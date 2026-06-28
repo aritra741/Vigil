@@ -5,6 +5,7 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { type PoolClient } from "pg";
 import * as schema from "./schema";
 import * as relations from "./relations";
+import { recordQueryMetric } from "./telemetry";
 
 const fullSchema = { ...schema, ...relations };
 
@@ -49,6 +50,56 @@ function createOidcPool(): AuroraDSQLPool {
   return p;
 }
 
+function wrapClient(client: any) {
+  if (!client || client.__wrapped) return;
+  client.__wrapped = true;
+
+  const originalClientQuery = client.query;
+  client.query = async function (this: any, ...cArgs: any[]) {
+    const start = performance.now();
+    try {
+      return await (originalClientQuery as any).apply(this, cArgs);
+    } finally {
+      const duration = performance.now() - start;
+      const queryText = typeof cArgs[0] === "string" ? cArgs[0] : cArgs[0]?.text || "Unknown Query";
+      recordQueryMetric(queryText, duration);
+    }
+  } as any;
+}
+
+function wrapPool(p: AuroraDSQLPool): AuroraDSQLPool {
+  const originalQuery = p.query;
+  p.query = async function (this: any, ...args: any[]) {
+    const start = performance.now();
+    try {
+      return await (originalQuery as any).apply(this, args);
+    } finally {
+      const duration = performance.now() - start;
+      const queryText = typeof args[0] === "string" ? args[0] : args[0]?.text || "Unknown Query";
+      recordQueryMetric(queryText, duration);
+    }
+  } as any;
+
+  const originalConnect = p.connect;
+  p.connect = function (this: any, ...args: any[]) {
+    const callback = args[0];
+    if (typeof callback === "function") {
+      args[0] = function (err: any, client: any, release: any) {
+        wrapClient(client);
+        return callback(err, client, release);
+      };
+      return (originalConnect as any).apply(this, args);
+    }
+
+    return (originalConnect as any).apply(this, args).then((client: any) => {
+      wrapClient(client);
+      return client;
+    });
+  } as any;
+
+  return p;
+}
+
 async function getPool(): Promise<AuroraDSQLPool> {
   if (pool) return pool;
   if (!isDbConfigured()) {
@@ -56,7 +107,8 @@ async function getPool(): Promise<AuroraDSQLPool> {
       "Database not configured. Set PGHOST and AWS_REGION in .env.local."
     );
   }
-  pool = useOidc() ? createOidcPool() : createLocalPool();
+  const rawPool = useOidc() ? createOidcPool() : createLocalPool();
+  pool = wrapPool(rawPool);
   return pool;
 }
 

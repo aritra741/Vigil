@@ -6,6 +6,10 @@ export interface TransactionForRules {
   receiverCountry: string;
   riskScore: number;
   paymentRail: string;
+  tx_count_1h?: number;
+  tx_total_1h?: number;
+  tx_count_24h?: number;
+  tx_total_24h?: number;
 }
 
 export interface RuleForEval {
@@ -43,6 +47,14 @@ function getMetricValue(
       return tx.riskScore;
     case "payment_rail":
       return tx.paymentRail;
+    case "tx_count_1h":
+      return tx.tx_count_1h ?? 0;
+    case "tx_total_1h":
+      return tx.tx_total_1h ?? 0;
+    case "tx_count_24h":
+      return tx.tx_count_24h ?? 0;
+    case "tx_total_24h":
+      return tx.tx_total_24h ?? 0;
     default:
       return "";
   }
@@ -103,6 +115,18 @@ export function buildExplanation(
       break;
     case "payment_rail":
       parts.push(`Payment rail ${transaction.paymentRail}`);
+      break;
+    case "tx_count_1h":
+      parts.push(`Sender hourly transaction count ${transaction.tx_count_1h ?? 0}`);
+      break;
+    case "tx_total_1h":
+      parts.push(`Sender hourly volume $${(transaction.tx_total_1h ?? 0).toLocaleString()}`);
+      break;
+    case "tx_count_24h":
+      parts.push(`Sender 24h transaction count ${transaction.tx_count_24h ?? 0}`);
+      break;
+    case "tx_total_24h":
+      parts.push(`Sender 24h volume $${(transaction.tx_total_24h ?? 0).toLocaleString()}`);
       break;
   }
   parts.push(`matched rule "${rule.name}"`);

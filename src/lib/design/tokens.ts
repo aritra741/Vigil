@@ -1,53 +1,65 @@
 /** Operational UI design tokens — Datadog/PagerDuty density */
 
 export const SURFACE = {
-  page: "#0a0a0a",
-  card: "#111111",
-  elevated: "#1a1a1a",
-  border: "#222222",
-  rowAlt: "#0f0f0f",
+  page: "#08090a",
+  card: "#101113",
+  elevated: "#18191c",
+  overlay: "#1f2023",
+  border: "rgba(255, 255, 255, 0.06)",
+  borderDefault: "rgba(255, 255, 255, 0.09)",
+  borderEmphasis: "rgba(255, 255, 255, 0.14)",
 } as const;
 
 export const SEVERITY = {
-  critical: "#ef4444",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "#22c55e",
+  critical: "#f5433d",
+  high: "#ee7b30",
+  medium: "#e5b847",
+  low: "#46b26c",
+} as const;
+
+export const SEVERITY_MUTED = {
+  critical: "rgba(245, 67, 61, 0.10)",
+  high: "rgba(238, 123, 48, 0.10)",
+  medium: "rgba(229, 184, 71, 0.08)",
+  low: "rgba(70, 178, 108, 0.08)",
 } as const;
 
 export type SeverityLevel = keyof typeof SEVERITY;
 
-export const METRIC_BORDER = {
-  default: "#8b5cf6",
-  critical: SEVERITY.critical,
-  high: SEVERITY.high,
-  medium: SEVERITY.medium,
-  low: SEVERITY.low,
-  neutral: "#3f3f46",
-} as const;
-
-export type MetricBorder = keyof typeof METRIC_BORDER;
-
 export function severityBg(severity: string, opacity = 0.12): string {
-  const color = SEVERITY[severity as SeverityLevel] ?? "#71717a";
+  const color = SEVERITY[severity as SeverityLevel] ?? "#8b8d98";
   return `color-mix(in srgb, ${color} ${opacity * 100}%, transparent)`;
 }
 
 export function severityText(severity: string): string {
-  return SEVERITY[severity as SeverityLevel] ?? "#a1a1aa";
+  return SEVERITY[severity as SeverityLevel] ?? "#8b8d98";
 }
 
 export const TX_STATUS = {
-  pending: { bg: "rgba(161,161,170,0.12)", text: "#a1a1aa" },
-  cleared: { bg: "rgba(34,197,94,0.12)", text: "#22c55e" },
-  flagged: { bg: "rgba(234,179,8,0.12)", text: "#eab308" },
-  blocked: { bg: "rgba(239,68,68,0.12)", text: "#ef4444" },
+  pending: { bg: "rgba(139,141,152,0.10)", text: "#8b8d98" },
+  cleared: { bg: "rgba(70,178,108,0.10)", text: "#46b26c" },
+  flagged: { bg: "rgba(238,123,48,0.10)", text: "#ee7b30" },
+  blocked: { bg: "rgba(245,67,61,0.10)", text: "#f5433d" },
 } as const;
 
 export const ALERT_STATUS = {
-  open: { bg: "rgba(161,161,170,0.12)", text: "#a1a1aa" },
-  investigating: { bg: "rgba(139,92,246,0.12)", text: "#a78bfa" },
-  escalated: { bg: "rgba(249,115,22,0.12)", text: "#f97316" },
-  resolved: { bg: "rgba(34,197,94,0.12)", text: "#22c55e" },
-  false_positive: { bg: "rgba(113,113,122,0.12)", text: "#71717a" },
+  open: { bg: "rgba(139,141,152,0.10)", text: "#8b8d98" },
+  investigating: { bg: "rgba(77,148,247,0.10)", text: "#4d94f7" },
+  escalated: { bg: "rgba(238,123,48,0.10)", text: "#ee7b30" },
+  resolved: { bg: "rgba(70,178,108,0.10)", text: "#46b26c" },
+  false_positive: { bg: "rgba(92,94,106,0.10)", text: "#5c5e6a" },
+} as const;
+
+export const TEXT = {
+  primary: "#ececef",
+  secondary: "#8b8d98",
+  tertiary: "#5c5e6a",
+  inverse: "#08090a",
+} as const;
+
+export const ACCENT = {
+  accent: "#7c5cfc",
+  hover: "#6b4ce6",
+  muted: "rgba(124, 92, 252, 0.12)",
+  border: "rgba(124, 92, 252, 0.25)",
 } as const;

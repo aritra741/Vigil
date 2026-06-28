@@ -92,6 +92,9 @@ const SEED_RULES: Omit<RuleForEval, "id">[] = [
   { name: "Small suspicious transfers", metric: "amount", operator: "less_than", ruleValue: "50", severity: "medium", action: "flag" },
   { name: "SWIFT large transfer", metric: "payment_rail", operator: "equals", ruleValue: "swift", severity: "high", action: "flag" },
   { name: "Micro-transaction anomaly", metric: "amount", operator: "less_than", ruleValue: "5", severity: "low", action: "flag" },
+  { name: "Rapid-fire sender", metric: "tx_count_1h", operator: "greater_than", ruleValue: "10", severity: "high", action: "escalate" },
+  { name: "Hourly volume spike", metric: "tx_total_1h", operator: "greater_than", ruleValue: "50000", severity: "critical", action: "escalate" },
+  { name: "24-hour accumulation", metric: "tx_total_24h", operator: "greater_than", ruleValue: "200000", severity: "high", action: "flag" },
 ];
 
 function pick<T>(arr: T[]): T {

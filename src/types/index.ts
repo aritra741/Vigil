@@ -25,6 +25,10 @@ export const RULE_METRICS = [
   "country_mismatch",
   "risk_score",
   "payment_rail",
+  "tx_count_1h",
+  "tx_total_1h",
+  "tx_count_24h",
+  "tx_total_24h",
 ] as const;
 export type RuleMetric = (typeof RULE_METRICS)[number];
 

@@ -46,7 +46,7 @@ export function TransactionTable({ rows }: TransactionTableProps) {
               key={tx.id}
               className="border-0 h-10 hover:bg-[#1a1a1a]"
               style={{
-                backgroundColor: i % 2 === 0 ? SURFACE.card : SURFACE.rowAlt,
+                backgroundColor: SURFACE.card,
                 borderBottom: `1px solid ${SURFACE.border}`,
               }}
             >

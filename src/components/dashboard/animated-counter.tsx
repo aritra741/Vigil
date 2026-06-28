@@ -19,23 +19,32 @@ export function AnimatedCounter({
   className,
   duration = 1200,
 }: AnimatedCounterProps) {
-  const [display, setDisplay] = useState(0);
+  const [display, setDisplay] = useState(value);
+  const prevValueRef = useRef(value);
   const startRef = useRef<number | null>(null);
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
     startRef.current = null;
+    const fromValue = prevValueRef.current;
+    const toValue = value;
+
     const animate = (timestamp: number) => {
       if (!startRef.current) startRef.current = timestamp;
       const progress = Math.min((timestamp - startRef.current) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(value * eased);
+      setDisplay(fromValue + (toValue - fromValue) * eased);
       if (progress < 1) {
         rafRef.current = requestAnimationFrame(animate);
+      } else {
+        prevValueRef.current = toValue;
       }
     };
     rafRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafRef.current);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      prevValueRef.current = toValue;
+    };
   }, [value, duration]);
 
   let formatted: string;
@@ -54,6 +63,6 @@ export function AnimatedCounter({
   }
 
   return (
-    <span className={cn("tabular-nums", className)}>{formatted}</span>
+    <span className={cn("font-mono tabular-nums", className)}>{formatted}</span>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/schema";
 import { getTenantId } from "@/lib/tenant";
 import { generateId, generateIdempotencyKey } from "@/lib/utils/ids";
+import { addMockTransaction } from "@/lib/demo/mock-db";
 import {
   evaluateAllRules,
   buildExplanation,
@@ -324,9 +325,100 @@ function generateSimulatedTransaction(profile: "normal" | "critical" | "high") {
   };
 }
 
-export async function simulateTransactionBurst() {
+async function getVelocityStats(db: any, tenantId: string, senderName: string) {
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [oneHour] = await db
+    .select({
+      count: count(),
+      total: sum(transactions.amount),
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.tenantId, tenantId),
+        eq(transactions.senderName, senderName),
+        gte(transactions.createdAt, oneHourAgo)
+      )
+    );
+
+  const [twentyFourHours] = await db
+    .select({
+      count: count(),
+      total: sum(transactions.amount),
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.tenantId, tenantId),
+        eq(transactions.senderName, senderName),
+        gte(transactions.createdAt, twentyFourHoursAgo)
+      )
+    );
+
+  return {
+    tx_count_1h: oneHour?.count ?? 0,
+    tx_total_1h: parseFloat(oneHour?.total ?? "0"),
+    tx_count_24h: twentyFourHours?.count ?? 0,
+    tx_total_24h: parseFloat(twentyFourHours?.total ?? "0"),
+  };
+}
+
+export async function simulateTransactionBurst(): Promise<{
+  success: boolean;
+  error?: string;
+  transactions?: any[];
+  alertsCreated?: number;
+}> {
   if (!isDbConfigured()) {
-    return { success: false, error: "Database not configured", transactions: [], alertsCreated: 0 };
+    const profiles: Array<"normal" | "critical" | "high"> = [
+      "normal",
+      "normal",
+      "high",
+      "critical",
+      "critical",
+    ];
+    const insertedTx: any[] = [];
+    let alertsCreated = 0;
+
+    for (const profile of profiles) {
+      const data = generateSimulatedTransaction(profile);
+      const severity = profile === "critical" ? "critical" : profile === "high" ? "high" : "medium";
+      const status = profile === "normal" ? "cleared" : profile === "critical" ? "blocked" : "flagged";
+
+      const mockTx = addMockTransaction({
+        senderCountry: data.senderCountry,
+        receiverCountry: data.receiverCountry,
+        amount: data.amount,
+        status,
+        ruleName: profile === "critical" ? "Extreme risk score" : "High-value transfer",
+        severity,
+        senderName: data.senderName,
+        receiverName: data.receiverName,
+        title: `${severity.toUpperCase()}: ${profile === "critical" ? "Extreme risk score" : "High-value transfer"}`
+      });
+
+      insertedTx.push({
+        id: mockTx.id,
+        amount: mockTx.amount.toFixed(2),
+        currency: "USD",
+        senderName: mockTx.senderName,
+        senderCountry: mockTx.senderCountry,
+        receiverName: mockTx.receiverName,
+        receiverCountry: mockTx.receiverCountry,
+        paymentRail: data.paymentRail,
+        riskScore: data.riskScore.toFixed(3),
+        status: mockTx.status,
+        createdAt: mockTx.createdAt,
+      });
+
+      if (status === "flagged" || status === "blocked") {
+        alertsCreated++;
+      }
+    }
+
+    return { success: true, transactions: insertedTx, alertsCreated };
   }
 
   const db = await getDb();
@@ -360,12 +452,18 @@ export async function simulateTransactionBurst() {
 
   for (const profile of profiles) {
     const data = generateSimulatedTransaction(profile);
+    
+    const velocity = isDbConfigured()
+      ? await getVelocityStats(db, tenantId, data.senderName)
+      : { tx_count_1h: 0, tx_total_1h: 0, tx_count_24h: 0, tx_total_24h: 0 };
+
     const txForRules = {
       amount: data.amount,
       senderCountry: data.senderCountry,
       receiverCountry: data.receiverCountry,
       riskScore: data.riskScore,
       paymentRail: data.paymentRail,
+      ...velocity,
     };
 
     const matched = evaluateAllRules(txForRules, rulesForEval);
@@ -465,12 +563,17 @@ export async function ingestTransaction(data: {
     action: r.action,
   }));
 
+  const velocity = isDbConfigured()
+    ? await getVelocityStats(db, tenantId, data.senderName)
+    : { tx_count_1h: 0, tx_total_1h: 0, tx_count_24h: 0, tx_total_24h: 0 };
+
   const txForRules = {
     amount: data.amount,
     senderCountry: data.senderCountry,
     receiverCountry: data.receiverCountry,
     riskScore: data.riskScore,
     paymentRail: data.paymentRail,
+    ...velocity,
   };
 
   const matched = evaluateAllRules(txForRules, rulesForEval);
@@ -501,4 +604,33 @@ export async function ingestTransaction(data: {
   );
 
   return tx;
+}
+
+export async function getTopRulesPerformance() {
+  if (!isDbConfigured()) {
+    return [
+      { name: "High-value transfer", count: 124 },
+      { name: "High-risk origin", count: 86 },
+      { name: "Crypto rail transfer", count: 48 },
+      { name: "Extreme risk score", count: 32 },
+      { name: "Rapid-fire sender", count: 19 },
+    ];
+  }
+
+  const db = await getDb();
+  const tenantId = await getTenantId();
+
+  const res = await db
+    .select({
+      name: rules.name,
+      count: sql<number>`count(${alerts.id})::int`,
+    })
+    .from(alerts)
+    .innerJoin(rules, eq(alerts.ruleId, rules.id))
+    .where(eq(alerts.tenantId, tenantId))
+    .groupBy(rules.name)
+    .orderBy(desc(sql`count(${alerts.id})`))
+    .limit(5);
+
+  return res;
 }

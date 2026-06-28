@@ -15,7 +15,7 @@ export function SimulateButton() {
     startTransition(async () => {
       try {
         const result = await simulateTransactionBurst();
-        if (!result.success) {
+        if (!result.success || !result.transactions || result.alertsCreated === undefined) {
           toast.error(result.error ?? "Simulation failed");
           return;
         }

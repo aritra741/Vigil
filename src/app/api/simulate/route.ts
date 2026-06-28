@@ -3,7 +3,7 @@ import { simulateTransactionBurst } from "@/lib/actions/transactions";
 
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function GET() {
   try {
     const result = await simulateTransactionBurst();
     return NextResponse.json(result);
@@ -13,4 +13,8 @@ export async function POST() {
       { status: 500 }
     );
   }
+}
+
+export async function POST() {
+  return GET();
 }
