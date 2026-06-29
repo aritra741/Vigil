@@ -1,6 +1,5 @@
 import { listTransactions } from "@/lib/actions/transactions";
-import { TransactionTable } from "@/components/transactions/transaction-table";
-import { SimulateButton } from "@/components/transactions/simulate-button";
+import { TransactionsClient } from "@/components/transactions/transactions-client";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,17 +18,7 @@ export default async function TransactionsPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-50">Transactions</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {total.toLocaleString()} transactions monitored
-          </p>
-        </div>
-        <SimulateButton />
-      </div>
-
-      <TransactionTable rows={rows} />
+      <TransactionsClient initialRows={rows} total={total} />
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">

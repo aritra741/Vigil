@@ -23,7 +23,7 @@ function getAlertMeta(title: string, id: string) {
   const rail = isWire ? "Wire" : isCrypto ? "Crypto" : isSwift ? "SWIFT" : "Card";
   
   // Deterministic route based on ID hash
-  const routes = ["US → NG", "NG → US", "VN → US", "VN → SG", "KE → US", "BD → SG"];
+  const routes = ["US → UK", "UK → US", "US → US", "UK → UK"];
   const hash = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const route = routes[hash % routes.length];
   

@@ -5,9 +5,20 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { simulateTransactionBurst } from "@/lib/actions/transactions";
+import {
+  simulateTransactionBurst,
+  type BurstAlertSummary,
+  type SimulatedTransactionRow,
+} from "@/lib/actions/transactions";
 
-export function SimulateButton() {
+interface SimulateButtonProps {
+  onBurstComplete?: (transactions: SimulatedTransactionRow[]) => void;
+}
+
+const describeCorridor = (alert: BurstAlertSummary) =>
+  `${alert.senderCountry} -> ${alert.receiverCountry}`;
+
+export function SimulateButton({ onBurstComplete }: SimulateButtonProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -19,19 +30,37 @@ export function SimulateButton() {
           toast.error(result.error ?? "Simulation failed");
           return;
         }
+        const isReplay = result.idempotentReplay;
+
         toast.success(
-          result.idempotentReplay
+          isReplay
             ? `${result.transactions.length} transactions already ingested (idempotent replay).`
             : `${result.transactions.length} transactions ingested. ${result.alertsCreated} alerts triggered.`,
           {
-            description: result.idempotentReplay
+            description: isReplay
               ? "Duplicate burst suppressed by tenant-scoped idempotency keys"
-              : result.alertsCreated > 0
-                ? "Critical alerts may require investigation"
-                : undefined,
+              : "Live metrics and queues will update as the burst settles.",
           }
         );
-        router.refresh();
+
+        if (!isReplay && result.alerts?.length) {
+          result.alerts
+            .filter((alert) => alert.severity === "critical" || alert.severity === "high")
+            .forEach((alert, index) => {
+              window.setTimeout(() => {
+                const variant = alert.severity === "critical" ? toast.error : toast.warning;
+                variant(alert.title, {
+                  description: `${alert.currency} ${alert.amount} · ${describeCorridor(alert)}`,
+                });
+              }, 350 + index * 500);
+            });
+        }
+
+        onBurstComplete?.(result.transactions);
+
+        if (!onBurstComplete) {
+          router.refresh();
+        }
       } catch {
         toast.error("Failed to simulate transaction burst");
       }

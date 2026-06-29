@@ -66,6 +66,30 @@ export interface SeverityBreakdown {
   count: number;
 }
 
+export interface BurstAlertSummary {
+  id: string;
+  title: string;
+  severity: string;
+  amount: string;
+  currency: string;
+  senderCountry: string;
+  receiverCountry: string;
+}
+
+export interface SimulatedTransactionRow {
+  id: string;
+  amount: string;
+  currency: string;
+  senderName: string;
+  senderCountry: string;
+  receiverName: string;
+  receiverCountry: string;
+  paymentRail: string;
+  riskScore: string;
+  status: string;
+  createdAt: Date;
+}
+
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   if (!isDbConfigured()) return getEmptyMetrics();
   const db = await getDb();
@@ -312,15 +336,15 @@ function generateSimulatedTransaction(profile: "normal" | "critical" | "high") {
     high: {
       amount: 15000 + Math.random() * 35000,
       riskScore: 0.6 + Math.random() * 0.2,
-      senderCountry: "BR",
-      receiverCountry: "US",
+      senderCountry: "US",
+      receiverCountry: "GB",
       paymentRail: "wire",
     },
     critical: {
       amount: 40000 + Math.random() * 60000,
       riskScore: 0.85 + Math.random() * 0.1,
-      senderCountry: "NG",
-      receiverCountry: "GB",
+      senderCountry: "GB",
+      receiverCountry: "US",
       paymentRail: "swift",
     },
   };
@@ -425,8 +449,8 @@ async function createAlertsForTransaction(
   tx: typeof transactions.$inferSelect,
   matched: RuleForEval[],
   txForRules: Parameters<typeof buildExplanation>[1]
-): Promise<number> {
-  if (matched.length === 0) return 0;
+): Promise<BurstAlertSummary[]> {
+  if (matched.length === 0) return [];
 
   const existingAlerts = await db
     .select({ ruleId: alerts.ruleId })
@@ -436,7 +460,7 @@ async function createAlertsForTransaction(
     );
 
   const existingRuleIds = new Set(existingAlerts.map((a) => a.ruleId));
-  let created = 0;
+  const created: BurstAlertSummary[] = [];
 
   for (const rule of matched) {
     if (existingRuleIds.has(rule.id)) continue;
@@ -467,7 +491,15 @@ async function createAlertsForTransaction(
       })
     );
 
-    created++;
+    created.push({
+      id: tx.id,
+      title: `${rule.severity.toUpperCase()}: ${rule.name}`,
+      severity: rule.severity,
+      amount: tx.amount,
+      currency: tx.currency,
+      senderCountry: tx.senderCountry,
+      receiverCountry: tx.receiverCountry,
+    });
   }
 
   return created;
@@ -476,12 +508,14 @@ async function createAlertsForTransaction(
 export async function simulateTransactionBurst(): Promise<{
   success: boolean;
   error?: string;
-  transactions?: any[];
+  transactions?: SimulatedTransactionRow[];
+  alerts?: BurstAlertSummary[];
   alertsCreated?: number;
   idempotentReplay?: boolean;
 }> {
   if (!isDbConfigured()) {
-    const insertedTx: any[] = [];
+    const insertedTx: SimulatedTransactionRow[] = [];
+    const createdAlerts: BurstAlertSummary[] = [];
     let alertsCreated = 0;
 
     for (const { profile, idempotencyKey } of BURST_PROFILES) {
@@ -541,12 +575,22 @@ export async function simulateTransactionBurst(): Promise<{
 
       if (status === "flagged" || status === "blocked") {
         alertsCreated++;
+        createdAlerts.push({
+          id: mockTx.id,
+          title: mockTx.title,
+          severity,
+          amount: mockTx.amount.toFixed(2),
+          currency: "USD",
+          senderCountry: mockTx.senderCountry,
+          receiverCountry: mockTx.receiverCountry,
+        });
       }
     }
 
     return {
       success: true,
       transactions: insertedTx,
+      alerts: createdAlerts,
       alertsCreated,
       idempotentReplay: alertsCreated === 0,
     };
@@ -570,7 +614,8 @@ export async function simulateTransactionBurst(): Promise<{
     action: r.action,
   }));
 
-  const insertedTx: (typeof transactions.$inferSelect)[] = [];
+  const insertedTx: SimulatedTransactionRow[] = [];
+  const createdAlerts: BurstAlertSummary[] = [];
   let alertsCreated = 0;
   let newTransactions = 0;
 
@@ -613,18 +658,21 @@ export async function simulateTransactionBurst(): Promise<{
     insertedTx.push(tx);
     if (isNew) newTransactions++;
 
-    alertsCreated += await createAlertsForTransaction(
+    const newAlerts = await createAlertsForTransaction(
       db,
       tenantId,
       tx,
       matched,
       txForRules
     );
+    alertsCreated += newAlerts.length;
+    createdAlerts.push(...newAlerts);
   }
 
   return {
     success: true,
     transactions: insertedTx,
+    alerts: createdAlerts,
     alertsCreated,
     idempotentReplay: newTransactions === 0,
   };
@@ -713,7 +761,7 @@ export async function getTopRulesPerformance() {
   if (!isDbConfigured()) {
     return [
       { name: "High-value transfer", count: 124 },
-      { name: "High-risk origin", count: 86 },
+      { name: "UK-origin review", count: 86 },
       { name: "Crypto rail transfer", count: 48 },
       { name: "Extreme risk score", count: 32 },
       { name: "Rapid-fire sender", count: 19 },

@@ -48,7 +48,7 @@ function getAlertMeta(title: string, id: string) {
   const rail = isWire ? "Wire" : isCrypto ? "Crypto" : isSwift ? "SWIFT" : "Card";
   
   // Staggered corridor directions
-  const routes = ["US → NG", "NG → US", "VN → US", "VN → SG", "KE → US", "BD → SG"];
+  const routes = ["US → UK", "UK → US", "US → US", "UK → UK"];
   const hash = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const route = routes[hash % routes.length];
   
@@ -112,7 +112,7 @@ export function DashboardClient({
   const rulesPerformance = useMemo(() => {
     return initialRulesPerformance || [
       { name: "High-value transfer", count: 124 },
-      { name: "High-risk origin", count: 86 },
+      { name: "UK-origin review", count: 86 },
       { name: "Crypto rail transfer", count: 48 },
       { name: "Extreme risk score", count: 32 },
       { name: "Rapid-fire sender", count: 19 },

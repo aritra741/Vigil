@@ -37,21 +37,22 @@ import {
 } from "@/types";
 
 export function RuleBuilder() {
+  const initialForm = {
+    name: "Wire transfers over $25,000",
+    description: "Flags large wire transactions before they clear settlement.",
+    metric: "amount" as RuleMetric,
+    operator: "greater_than" as RuleOperator,
+    ruleValue: "25000",
+    severity: "high" as Severity,
+    action: "flag" as RuleAction,
+  };
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [backtestResult, setBacktestResult] = useState<any | null>(null);
   const router = useRouter();
 
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    metric: "amount" as RuleMetric,
-    operator: "greater_than" as RuleOperator,
-    ruleValue: "",
-    severity: "medium" as Severity,
-    action: "flag" as RuleAction,
-  });
+  const [form, setForm] = useState(initialForm);
 
   const handleBacktest = async () => {
     if (!form.ruleValue) {
@@ -92,15 +93,7 @@ export function RuleBuilder() {
         toast.success(`Rule "${form.name}" created and activated`);
         setOpen(false);
         setBacktestResult(null);
-        setForm({
-          name: "",
-          description: "",
-          metric: "amount",
-          operator: "greater_than",
-          ruleValue: "",
-          severity: "medium",
-          action: "flag",
-        });
+        setForm(initialForm);
         router.refresh();
       } else {
         toast.error(result.error ?? "Failed to create rule");
@@ -112,6 +105,7 @@ export function RuleBuilder() {
     setOpen(isOpen);
     if (!isOpen) {
       setBacktestResult(null);
+      setForm(initialForm);
     }
   };
 
@@ -203,7 +197,7 @@ export function RuleBuilder() {
                 value={form.ruleValue}
                 onChange={(e) => setForm({ ...form, ruleValue: e.target.value })}
                 className="mt-1 bg-zinc-950 border-zinc-800 text-zinc-100 font-mono"
-                placeholder="e.g. 10000 or NG,KE"
+                placeholder="e.g. 10000 or US,GB"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -277,6 +271,10 @@ export function RuleBuilder() {
               </div>
 
               <div className="rounded bg-zinc-950 p-3 border border-zinc-800/80 space-y-3 font-mono">
+                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-500">
+                  <span>Execution time</span>
+                  <span className="text-zinc-200">{backtestResult.queryTimeMs}ms</span>
+                </div>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <span className="text-zinc-500 block text-[9px] uppercase">Matched Tx</span>
@@ -347,4 +345,3 @@ export function RuleBuilder() {
     </Dialog>
   );
 }
-

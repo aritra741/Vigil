@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    const startedAt = performance.now();
     const { metric, operator, ruleValue } = await request.json();
 
     if (!metric || !operator || ruleValue === undefined) {
@@ -26,12 +27,13 @@ export async function POST(request: Request) {
         matchRate: Math.round((matched / total) * 10000) / 100,
         matchedVolume: vol,
         estimatedDailyAlerts: Math.round((matched / 30) * 10) / 10,
+        queryTimeMs: Math.max(1, Math.round(performance.now() - startedAt)),
         topMatches: [
-          { amount: (amtVal * 1.5).toFixed(2), senderName: "OceanGate Trading", senderCountry: "NG", receiverCountry: "US", riskScore: "0.820", createdAt: new Date().toISOString() },
+          { amount: (amtVal * 1.5).toFixed(2), senderName: "OceanGate Trading", senderCountry: "GB", receiverCountry: "US", riskScore: "0.820", createdAt: new Date().toISOString() },
           { amount: (amtVal * 1.3).toFixed(2), senderName: "Apex Digital LLC", senderCountry: "US", receiverCountry: "GB", riskScore: "0.610", createdAt: new Date(Date.now() - 3600000).toISOString() },
-          { amount: (amtVal * 1.2).toFixed(2), senderName: "Vertex Marketplace", senderCountry: "BR", receiverCountry: "US", riskScore: "0.580", createdAt: new Date(Date.now() - 7200000).toISOString() },
-          { amount: (amtVal * 1.1).toFixed(2), senderName: "Meridian Trading Co", senderCountry: "US", receiverCountry: "DE", riskScore: "0.440", createdAt: new Date(Date.now() - 10800000).toISOString() },
-          { amount: (amtVal * 1.05).toFixed(2), senderName: "PrimeShift Inc", senderCountry: "IN", receiverCountry: "US", riskScore: "0.390", createdAt: new Date(Date.now() - 14400000).toISOString() },
+          { amount: (amtVal * 1.2).toFixed(2), senderName: "Vertex Marketplace", senderCountry: "GB", receiverCountry: "US", riskScore: "0.580", createdAt: new Date(Date.now() - 7200000).toISOString() },
+          { amount: (amtVal * 1.1).toFixed(2), senderName: "Meridian Trading Co", senderCountry: "US", receiverCountry: "GB", riskScore: "0.440", createdAt: new Date(Date.now() - 10800000).toISOString() },
+          { amount: (amtVal * 1.05).toFixed(2), senderName: "PrimeShift Inc", senderCountry: "GB", receiverCountry: "US", riskScore: "0.390", createdAt: new Date(Date.now() - 14400000).toISOString() },
         ],
       });
     }
@@ -137,6 +139,7 @@ export async function POST(request: Request) {
         matchRate: 0,
         matchedVolume: 0,
         estimatedDailyAlerts: 0,
+        queryTimeMs: Math.max(1, Math.round(performance.now() - startedAt)),
         topMatches: [],
       });
     }
@@ -177,6 +180,7 @@ export async function POST(request: Request) {
       matchRate: Math.round((matchedCount / totalTransactions) * 10000) / 100,
       matchedVolume,
       estimatedDailyAlerts: Math.round((matchedCount / 30) * 10) / 10,
+      queryTimeMs: Math.max(1, Math.round(performance.now() - startedAt)),
       topMatches: topMatchesRes.rows,
     });
   } catch (err) {

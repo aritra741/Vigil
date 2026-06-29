@@ -16,9 +16,10 @@ import type { Transaction } from "@/lib/db/schema";
 
 interface TransactionTableProps {
   rows: Transaction[];
+  highlightedIds?: string[];
 }
 
-export function TransactionTable({ rows }: TransactionTableProps) {
+export function TransactionTable({ rows, highlightedIds = [] }: TransactionTableProps) {
   return (
     <div
       className="rounded-md overflow-hidden"
@@ -41,12 +42,12 @@ export function TransactionTable({ rows }: TransactionTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((tx, i) => (
+          {rows.map((tx) => (
             <TableRow
               key={tx.id}
-              className="border-0 h-10 hover:bg-[#1a1a1a]"
+              className="border-0 h-10 hover:bg-[#1a1a1a] transition-colors duration-700"
               style={{
-                backgroundColor: SURFACE.card,
+                backgroundColor: highlightedIds.includes(tx.id) ? "#171329" : SURFACE.card,
                 borderBottom: `1px solid ${SURFACE.border}`,
               }}
             >

@@ -73,9 +73,9 @@ const RECEIVER_NAMES = [
   "United Merchants",
 ];
 
-const COUNTRIES_NORMAL = ["US", "CA", "GB", "DE", "FR", "AU", "JP", "NL", "SE", "SG"];
-const COUNTRIES_ELEVATED = ["BR", "MX", "IN", "ID", "PH", "TH", "CO", "AR"];
-const COUNTRIES_HIGH_RISK = ["NG", "KE", "VN", "BD", "PK", "UA", "RO"];
+const COUNTRIES_NORMAL = ["US", "GB"];
+const COUNTRIES_ELEVATED = ["US", "GB"];
+const COUNTRIES_HIGH_RISK = ["US", "GB"];
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"];
 const PAYMENT_RAILS = ["ach", "wire", "card", "crypto", "sepa", "swift"];
 
@@ -83,8 +83,8 @@ const SEED_RULES: Omit<RuleForEval, "id">[] = [
   { name: "High-value transfer", metric: "amount", operator: "greater_than", ruleValue: "10000", severity: "high", action: "flag" },
   { name: "Very high-value transfer", metric: "amount", operator: "greater_than", ruleValue: "50000", severity: "critical", action: "escalate" },
   { name: "Cross-border high-value", metric: "country_mismatch", operator: "equals", ruleValue: "true", severity: "high", action: "flag" },
-  { name: "High-risk origin", metric: "sender_country", operator: "in_list", ruleValue: "NG,KE,VN,BD", severity: "medium", action: "flag" },
-  { name: "High-risk destination", metric: "receiver_country", operator: "in_list", ruleValue: "NG,KE,VN,BD", severity: "medium", action: "flag" },
+  { name: "UK-origin review", metric: "sender_country", operator: "equals", ruleValue: "GB", severity: "medium", action: "flag" },
+  { name: "UK-destination review", metric: "receiver_country", operator: "equals", ruleValue: "GB", severity: "medium", action: "flag" },
   { name: "Crypto rail transfer", metric: "payment_rail", operator: "equals", ruleValue: "crypto", severity: "high", action: "flag" },
   { name: "Extreme risk score", metric: "risk_score", operator: "greater_than", ruleValue: "0.85", severity: "critical", action: "escalate" },
   { name: "Very high risk score", metric: "risk_score", operator: "greater_than", ruleValue: "0.70", severity: "high", action: "flag" },
