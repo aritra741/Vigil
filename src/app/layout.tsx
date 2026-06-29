@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vigil — Financial Risk Operations",
+  title: "Vigil · Financial Risk Operations",
   description:
     "Monitor transactions, trigger rules, investigate alerts, and maintain an audit-ready trail.",
 };
