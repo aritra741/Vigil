@@ -152,6 +152,12 @@ export function TransactionTimeline({ alertId, senderName }: { alertId: string; 
                 onMouseEnter={() => setHoveredPoint(p)}
                 onMouseLeave={() => setHoveredPoint(null)}
               >
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={10}
+                  fill="transparent"
+                />
                 {/* Glowing outline for flagged weeks */}
                 {isFlagged && (
                   <circle
@@ -164,6 +170,7 @@ export function TransactionTimeline({ alertId, senderName }: { alertId: string; 
                     className="animate-ping"
                     style={{ transformOrigin: `${p.x}px ${p.y}px` }}
                     opacity={0.25}
+                    pointerEvents="none"
                   />
                 )}
                 {/* Core node circle */}
@@ -172,7 +179,7 @@ export function TransactionTimeline({ alertId, senderName }: { alertId: string; 
                   cy={p.y}
                   r={nodeRadius}
                   fill={nodeColor}
-                  className="transition-transform hover:scale-125"
+                  pointerEvents="none"
                 />
               </g>
             );
