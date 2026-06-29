@@ -65,10 +65,11 @@ export function TransactionsClient({ initialRows, total }: TransactionsClientPro
   useEffect(() => {
     if (hasTriggeredBurstRef.current) return;
     hasTriggeredBurstRef.current = true;
+    const burstId = `screen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const runBurst = async () => {
       try {
-        const result = await simulateTransactionBurst();
+        const result = await simulateTransactionBurst(burstId);
         if (!result.success || !result.transactions || result.alertsCreated === undefined) {
           toast.error(result.error ?? "Simulation failed");
           return;

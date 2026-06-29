@@ -33,17 +33,7 @@ import * as schema from "@/lib/db/schema";
 import * as relations from "@/lib/db/relations";
 
 type Db = NodePgDatabase<typeof schema & typeof relations>;
-
-const BURST_PROFILES: Array<{
-  profile: "normal" | "critical" | "high";
-  idempotencyKey: string;
-}> = [
-  { profile: "normal", idempotencyKey: "burst_sim_normal_1" },
-  { profile: "normal", idempotencyKey: "burst_sim_normal_2" },
-  { profile: "high", idempotencyKey: "burst_sim_high_1" },
-  { profile: "critical", idempotencyKey: "burst_sim_critical_1" },
-  { profile: "critical", idempotencyKey: "burst_sim_critical_2" },
-];
+type BurstProfile = "normal" | "critical" | "high";
 
 export interface DashboardMetrics {
   transactionsToday: number;
@@ -366,6 +356,40 @@ function generateSimulatedTransaction(profile: "normal" | "critical" | "high") {
   };
 }
 
+function pickWeightedProfile(): BurstProfile {
+  const roll = Math.random();
+  if (roll < 0.22) return "critical";
+  if (roll < 0.56) return "high";
+  return "normal";
+}
+
+function getBurstProfiles(burstId = "default") {
+  const burstSize = 4 + Math.floor(Math.random() * 4);
+  const profiles: BurstProfile[] = [];
+
+  for (let i = 0; i < burstSize; i++) {
+    profiles.push(pickWeightedProfile());
+  }
+
+  if (!profiles.includes("critical")) {
+    profiles[Math.floor(Math.random() * profiles.length)] = "critical";
+  }
+
+  if (profiles.filter((profile) => profile === "high" || profile === "critical").length < 2) {
+    const normalIndex = profiles.findIndex((profile) => profile === "normal");
+    if (normalIndex >= 0) {
+      profiles[normalIndex] = "high";
+    } else {
+      profiles.push("high");
+    }
+  }
+
+  return profiles.map((profile, index) => ({
+    profile,
+    idempotencyKey: `burst_sim_${burstId}_${profile}_${index + 1}`,
+  }));
+}
+
 async function getVelocityStats(db: any, tenantId: string, senderName: string) {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -505,7 +529,7 @@ async function createAlertsForTransaction(
   return created;
 }
 
-export async function simulateTransactionBurst(): Promise<{
+export async function simulateTransactionBurst(burstId?: string): Promise<{
   success: boolean;
   error?: string;
   transactions?: SimulatedTransactionRow[];
@@ -513,12 +537,14 @@ export async function simulateTransactionBurst(): Promise<{
   alertsCreated?: number;
   idempotentReplay?: boolean;
 }> {
+  const burstProfiles = getBurstProfiles(burstId);
+
   if (!isDbConfigured()) {
     const insertedTx: SimulatedTransactionRow[] = [];
     const createdAlerts: BurstAlertSummary[] = [];
     let alertsCreated = 0;
 
-    for (const { profile, idempotencyKey } of BURST_PROFILES) {
+    for (const { profile, idempotencyKey } of burstProfiles) {
       const data = generateSimulatedTransaction(profile);
       const severity =
         profile === "critical" ? "critical" : profile === "high" ? "high" : "medium";
@@ -619,7 +645,7 @@ export async function simulateTransactionBurst(): Promise<{
   let alertsCreated = 0;
   let newTransactions = 0;
 
-  for (const { profile, idempotencyKey } of BURST_PROFILES) {
+  for (const { profile, idempotencyKey } of burstProfiles) {
     const data = generateSimulatedTransaction(profile);
 
     const velocity = await getVelocityStats(db, tenantId, data.senderName);
